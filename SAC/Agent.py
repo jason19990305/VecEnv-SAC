@@ -1,11 +1,15 @@
 
+from gymnasium.vector import AsyncVectorEnv
 from torch.distributions import Normal
 import torch.nn.functional as F
 import matplotlib.pyplot as plt
+import gymnasium as gym
 import numpy as np 
 import torch
 import time
 import copy
+import os
+
 
 # Custom class
 from SAC.ReplayBuffer import ReplayBuffer
@@ -18,13 +22,15 @@ class Agent():
 
         # Hyperparameter
         self.evaluate_freq_steps = args.evaluate_freq_steps
+        self.update_freq_steps = args.update_freq_steps
         self.max_train_steps = args.max_train_steps
         self.num_actions = args.num_actions
-        self.mini_batch_size = args.mini_batch_size
+        self.batch_size = args.batch_size
         self.num_states = args.num_states
-        self.mem_min = args.mem_min
-        self.gamma = args.gamma
         self.init_alpha = args.init_alpha
+        self.mem_min = args.mem_min
+        self.env_name = args.env_name
+        self.gamma = args.gamma
         self.tau = args.tau
         self.lr = args.lr
         self.d = args.d
@@ -36,14 +42,27 @@ class Agent():
 
         # other
         self.env = env
+        self.env_eval = copy.deepcopy(env)
+        self.num_envs = os.cpu_count() - 1
+        print("num_envs : ", self.num_envs)
         self.action_max = env.action_space.high[0]
         self.replay_buffer = ReplayBuffer(args)
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        if torch.cuda.is_available() and self.device.type == "cuda":
+            print("Device name : ",torch.cuda.get_device_name(self.device))
+        env_fns = [lambda : gym.make(self.env_name) for _ in range(self.num_envs)]
+        self.venv = AsyncVectorEnv(env_fns , autoreset_mode= gym.vector.AutoresetMode.SAME_STEP)
+
         
 
-        # Actor-Critic
-        self.actor = Actor(args,hidden_layer_num_list.copy())
-        self.critic1 = Critic(args,hidden_layer_num_list.copy())
-        self.critic2 = Critic(args,hidden_layer_num_list.copy())
+        # Actor-Critic        
+        self.actor = Actor(args,hidden_layer_num_list.copy()).to(self.device)
+        self.critic1 = Critic(args,hidden_layer_num_list.copy()).to(self.device)
+        self.critic2 = Critic(args,hidden_layer_num_list.copy()).to(self.device)
+        self.actor_cpu = Actor(args,hidden_layer_num_list.copy())
+        self.critic1_cpu = Critic(args,hidden_layer_num_list.copy())
+        self.critic2_cpu = Critic(args,hidden_layer_num_list.copy())
+        self.update_cpu()
         self.critic1_target = copy.deepcopy(self.critic1)
         self.critic2_target = copy.deepcopy(self.critic2)
         self.optimizer_critic1 = torch.optim.Adam(self.critic1.parameters(), lr=self.lr, eps=1e-5)
@@ -59,7 +78,11 @@ class Agent():
         print(self.critic1)
         print(self.critic2)
         print("-----------")
-        
+    
+    def update_cpu(self):
+        self.actor_cpu.load_state_dict(self.actor.state_dict())
+        self.critic1_cpu.load_state_dict(self.critic1.state_dict())
+        self.critic2_cpu.load_state_dict(self.critic2.state_dict())
     @property
     def alpha(self):
         return self.log_alpha.exp()
@@ -67,16 +90,15 @@ class Agent():
     def choose_action(self,state):
 
         state = torch.tensor(state, dtype=torch.float)
-
-        s = torch.unsqueeze(state,0)
+        #s = torch.unsqueeze(state,0)
         with torch.no_grad():
-            action , _ , _ = self.actor.sample(s)
+            action , _ , _ = self.actor_cpu.sample(state)
 
-        return action.cpu().numpy().flatten()
+        return action.cpu().numpy()
 
     def evaluate_action(self,state):
 
-        state = torch.tensor(state, dtype=torch.float)
+        state = torch.tensor(state, dtype=torch.float).to(self.device)
 
         s = torch.unsqueeze(state,0)
         with torch.no_grad():
@@ -117,45 +139,51 @@ class Agent():
         step_count_list = []
         alpha_list = []
         entropy_list = []
+        evaluate_count = 0
         
+         # Reset Vector Env
+        s , infos = self.venv.reset()                        
+
         # Training Loop
-        while self.total_steps < self.max_train_steps:
-            s = self.env.reset()[0]            
-            while True:
+        while self.total_steps < self.max_train_steps:            
+            # Sample data
+            for step in range(self.update_freq_steps // self.num_envs + 1):
+                # Choose action
                 a = self.choose_action(s)
-                s_, r, done , truncated , _ = self.env.step(a)
-                done = done or truncated
+                s_ , r , done, truncated, infos = self.venv.step(a)  # Vector Env
+                # Handle final state
+                for j in range(self.num_envs):
+                    if done[j] or truncated[j]:
+                        next_state = infos["final_obs"][j]
+                    else : 
+                        next_state = copy.deepcopy(s_[j])                        
 
-
-                # storage data
-                self.replay_buffer.store(s, a, [r], s_, done)
+                    # s, a, r, s_, done
+                    self.replay_buffer.store(s[j], a[j], [r[j]], next_state, [truncated[j] or done[j]])
+                    self.total_steps += 1
+                    evaluate_count += 1
                 
-                # update state
                 s = s_
-
-                if self.replay_buffer.size >= self.mem_min:
-                    self.training_count += 1
-                    self.update()
-
-                if self.total_steps % self.evaluate_freq_steps == 0:
-                    self.evaluate_count += 1
-                    evaluate_reward , entropy = self.evaluate_policy(self.env)
-                    step_reward_list.append(evaluate_reward)
-                    step_count_list.append(self.total_steps)
-                    alpha_list.append(self.alpha.item())
-                    entropy_list.append(entropy)
-                    time_end = time.time()
-                    h = int((time_end - time_start) // 3600)
-                    m = int(((time_end - time_start) % 3600) // 60)
-                    second = int((time_end - time_start) % 60)
-                    print("---------")
-                    print("Time : %02d:%02d:%02d"%(h,m,second))
-                    print("Training \tStep : %d / %d"%(self.total_steps,self.max_train_steps))
-                    print("Evaluate count : %d\tEvaluate reward : %0.2f"%(self.evaluate_count,evaluate_reward))
-
-                self.total_steps += 1
-                if done or truncated:
-                    break
+            
+            # Update 
+            for _ in range(self.update_freq_steps):
+                self.update()
+            
+            # Evaluate
+            if evaluate_count >= self.evaluate_freq_steps:
+                evaluate_reward , entropy = self.evaluate_policy(self.env_eval)
+                step_reward_list.append(evaluate_reward)
+                step_count_list.append(self.total_steps)
+                entropy_list.append(entropy)
+                alpha_list.append(self.alpha.item())
+                time_end = time.time()
+                h = int((time_end - time_start) // 3600)
+                m = int(((time_end - time_start) % 3600) // 60)
+                second = int((time_end - time_start) % 60)
+                print("---------")
+                print("Time : %02d:%02d:%02d"%(h,m,second))
+                print("Step : %d / %d\tEvaluate reward : %0.2f"%(self.total_steps,self.max_train_steps,evaluate_reward))
+                evaluate_count = 0
 
         # Plot the training curve
         plt.plot(step_count_list, step_reward_list)
@@ -224,6 +252,7 @@ class Agent():
         if self.total_steps % self.d == 0 :         
             self.soft_update(self.critic1_target,self.critic1, self.tau)
             self.soft_update(self.critic2_target,self.critic2, self.tau)
+        self.update_cpu()
 
     def soft_update(self, target, source, tau):
         for target_param, param in zip(target.parameters(), source.parameters()):
