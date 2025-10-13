@@ -9,7 +9,7 @@ from gymnasium.wrappers import RecordVideo
 
 class main():
     def __init__(self,args):
-        env_name = 'HalfCheetah-v5'
+        env_name = 'InvertedPendulum-v5'
         env = gym.make(env_name)
         num_states = env.observation_space.shape[0]
         num_actions = env.action_space.shape[0]

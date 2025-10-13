@@ -98,11 +98,11 @@ class Agent():
 
     def evaluate_action(self,state):
 
-        state = torch.tensor(state, dtype=torch.float).to(self.device)
+        state = torch.tensor(state, dtype=torch.float)
 
         s = torch.unsqueeze(state,0)
         with torch.no_grad():
-            _ , log_prob , action = self.actor.sample(s)
+            _ , log_prob , action = self.actor_cpu.sample(s)
 
         return action.cpu().numpy().flatten() , log_prob.item()
 
@@ -185,27 +185,33 @@ class Agent():
                 print("Step : %d / %d\tEvaluate reward : %0.2f"%(self.total_steps,self.max_train_steps,evaluate_reward))
                 evaluate_count = 0
 
+        plot_dir = "Plot"
+        os.makedirs(plot_dir, exist_ok=True)
+
         # Plot the training curve
         plt.plot(step_count_list, step_reward_list)
         plt.xlabel("Steps")
         plt.ylabel("Reward")
         plt.title("Training Curve")
-        plt.show()
+        plt.savefig(os.path.join(plot_dir, f"{self.env_name}_training_curve.png"))
+        plt.close()
         
         # Plot the alpha curve
         plt.plot(step_count_list, alpha_list)
         plt.xlabel("Steps")
         plt.ylabel("Alpha")
-        plt.title("Training Curve")
-        plt.show()
+        plt.title("Alpha Curve")
+        plt.savefig(os.path.join(plot_dir, f"{self.env_name}_alpha_curve.png"))
+        plt.close()
         
         # Plot the entropy curve
         plt.plot(step_count_list, entropy_list)
         plt.xlabel("Steps")
         plt.ylabel("Entropy")
-        plt.title("Training Curve")
-        plt.show()
-            
+        plt.title("Entropy Curve")
+        plt.savefig(os.path.join(plot_dir, f"{self.env_name}_entropy_curve.png"))
+        plt.close()
+    
     def update(self):
         minibatch_s, minibatch_a, minibatch_r, minibatch_s_, minibatch_done = self.replay_buffer.sample_minibatch() 
 
