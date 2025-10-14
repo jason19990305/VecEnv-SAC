@@ -4,7 +4,7 @@ import gymnasium as gym # openai gym
 import numpy as np 
 import argparse
 from SAC.Agent import Agent
-import torch
+from gymnasium.wrappers import RecordVideo
 
 
 class main():
@@ -36,11 +36,10 @@ class main():
         agent.train() 
 
         # evaluate 
-        render_env = gym.make(env_name,render_mode='human')
-        
-        for i in range(10000):
-            evaluate_reward , _ = agent.evaluate_policy(render_env)
-            print(f"Evaluate Episode {i+1}: Average Reward = {evaluate_reward:.2f}")
+        render_env = gym.make(env_name, render_mode="rgb_array")  
+        render_env = RecordVideo(render_env, video_folder = "Video/"+env_name, episode_trigger=lambda x: True)
+        agent.evaluate_policy(render_env)
+        render_env.close()
 
 
 if __name__ == '__main__':
