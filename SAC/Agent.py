@@ -165,9 +165,7 @@ class Agent():
                 
                 s = s_
             
-            # Update 
-            for _ in range(self.update_freq_steps):
-                self.update()
+            
             
             # Evaluate
             if evaluate_count >= self.evaluate_freq_steps:
@@ -184,6 +182,11 @@ class Agent():
                 print("Time : %02d:%02d:%02d"%(h,m,second))
                 print("Step : %d / %d\tEvaluate reward : %0.2f"%(self.total_steps,self.max_train_steps,evaluate_reward))
                 evaluate_count = 0
+                
+            # Update 
+            for _ in range(self.update_freq_steps):
+                self.update()
+            self.update_cpu()
 
         plot_dir = "Plot"
         os.makedirs(plot_dir, exist_ok=True)
@@ -258,7 +261,7 @@ class Agent():
         if self.total_steps % self.d == 0 :         
             self.soft_update(self.critic1_target,self.critic1, self.tau)
             self.soft_update(self.critic2_target,self.critic2, self.tau)
-        self.update_cpu()
+        
 
     def soft_update(self, target, source, tau):
         for target_param, param in zip(target.parameters(), source.parameters()):
