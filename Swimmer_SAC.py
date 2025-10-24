@@ -49,7 +49,6 @@ if __name__ == '__main__':
     parser.add_argument("--tau", type=float, default=0.005, help="Parameter for soft update")
     parser.add_argument("--gamma", type=float, default=0.99, help="Discount factor")
     parser.add_argument("--init_alpha", type=float, default=0.2, help="Tempture parameter")
-    parser.add_argument("--mem_min", type=float, default=1000, help="minimum size of replay memory before updating actor-critic.")
     parser.add_argument("--batch_size", type=int, default=512 , help="Batch size")
     parser.add_argument("--update_freq_steps", type=int, default=20000, help="Update frequency in steps")
     parser.add_argument("--buffer_size", type=int, default=int(1e6), help="Learning rate of actor")

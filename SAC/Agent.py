@@ -28,7 +28,6 @@ class Agent():
         self.batch_size = args.batch_size
         self.num_states = args.num_states
         self.init_alpha = args.init_alpha
-        self.mem_min = args.mem_min
         self.env_name = args.env_name
         self.gamma = args.gamma
         self.tau = args.tau
@@ -183,6 +182,8 @@ class Agent():
                 print("Step : %d / %d\tEvaluate reward : %0.2f"%(self.total_steps,self.max_train_steps,evaluate_reward))
                 evaluate_count = 0
                 
+            # Sync
+            self.replay_buffer.sync_to_device()
             # Update 
             for _ in range(self.update_freq_steps):
                 self.update()
