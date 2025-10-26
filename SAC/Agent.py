@@ -233,6 +233,7 @@ class Agent():
         critic1_loss = F.mse_loss(value1 , target_value)
         self.optimizer_critic1.zero_grad()
         critic1_loss.backward()
+        torch.nn.utils.clip_grad_norm_(self.critic1.parameters(), 0.5)
         self.optimizer_critic1.step()
         
         # Update Critic 2
@@ -240,6 +241,7 @@ class Agent():
         critic2_loss = F.mse_loss(value2 , target_value)
         self.optimizer_critic2.zero_grad()
         critic2_loss.backward()
+        torch.nn.utils.clip_grad_norm_(self.critic2.parameters(), 0.5)
         self.optimizer_critic2.step()
         
         # Update Actor
@@ -250,23 +252,32 @@ class Agent():
         actor_loss =  (self.alpha.detach() * log_prob - min_value).mean()
         self.optimizer_actor.zero_grad()
         actor_loss.backward()
+        torch.nn.utils.clip_grad_norm_(self.actor.parameters(), 0.5)
         self.optimizer_actor.step()
         
         # Update alpha
         alpha_loss = (self.alpha * (-log_prob - self.target_entropy).detach()).mean()        
         self.optimizer_alpha.zero_grad()    
         alpha_loss.backward()
+        torch.nn.utils.clip_grad_norm_([self.log_alpha], 0.5)
         self.optimizer_alpha.step()
         
         # Update target networks
         if self.total_steps % self.d == 0 :         
             self.soft_update(self.critic1_target,self.critic1, self.tau)
             self.soft_update(self.critic2_target,self.critic2, self.tau)
-        
+        self.lr_decay(self.total_steps)
 
     def soft_update(self, target, source, tau):
         for target_param, param in zip(target.parameters(), source.parameters()):
             target_param.data.copy_(target_param.data * (1.0 - tau) + param.data * tau)
             
-    
-        
+    def lr_decay(self, total_steps):
+        lr_a_now = self.lr * (1 - total_steps / self.max_train_steps)
+        lr_c_now = self.lr * (1 - total_steps / self.max_train_steps)
+        for opt in self.optimizer_actor.param_groups:
+            opt['lr'] = lr_a_now
+        for opt in self.optimizer_critic1.param_groups:
+            opt['lr'] = lr_c_now
+        for opt in self.optimizer_critic2.param_groups:
+            opt['lr'] = lr_c_now

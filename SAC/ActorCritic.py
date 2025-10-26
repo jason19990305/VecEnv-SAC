@@ -3,8 +3,13 @@ import torch.nn.functional as F
 import torch.nn as nn 
 import torch
 
-epsilon = 1e-6
 
+
+def orthogonal_init(layer, gain=1.0):
+    nn.init.orthogonal_(layer.weight, gain=gain)
+    nn.init.constant_(layer.bias, 0)
+    
+epsilon = 1e-6
 
 class Actor(nn.Module):
     def __init__(self, args, hidden_layers=[64, 64]):
@@ -24,10 +29,14 @@ class Actor(nn.Module):
             num_output = hidden_layers[i + 1]            
             layer = nn.Linear(num_input, num_output)
             fc_list.append(layer)
+            orthogonal_init(fc_list[-1])
+
             
         self.mean_linear = nn.Linear(hidden_layers[-1], self.num_actions)
         self.std_linear = nn.Linear(hidden_layers[-1], self.num_actions)
-        
+        orthogonal_init(self.mean_linear, gain=0.01)
+        orthogonal_init(self.std_linear, gain=0.01)
+
         # Convert list to ModuleList for proper registration
         self.layers = nn.ModuleList(fc_list)
         self.relu = nn.ReLU()
