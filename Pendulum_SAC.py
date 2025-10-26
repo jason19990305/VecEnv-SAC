@@ -50,6 +50,7 @@ if __name__ == '__main__':
     parser.add_argument("--gamma", type=float, default=0.99, help="Discount factor")
     parser.add_argument("--init_alpha", type=float, default=0.2, help="Tempture parameter")
     parser.add_argument("--batch_size", type=int, default=512, help="Batch size")
+    parser.add_argument("--use_state_norm", type=bool, default=True, help="Whether to apply state normalization")
     parser.add_argument("--update_freq_steps", type=int, default=5000, help="Update frequency in steps")
     parser.add_argument("--buffer_size", type=int, default=int(1e4), help="Learning rate of actor")
     parser.add_argument("--max_train_steps", type=int, default=int(6e4), help=" Maximum number of training steps")
