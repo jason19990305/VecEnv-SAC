@@ -266,18 +266,8 @@ class Agent():
         if self.total_steps % self.d == 0 :         
             self.soft_update(self.critic1_target,self.critic1, self.tau)
             self.soft_update(self.critic2_target,self.critic2, self.tau)
-        self.lr_decay(self.total_steps)
 
     def soft_update(self, target, source, tau):
         for target_param, param in zip(target.parameters(), source.parameters()):
             target_param.data.copy_(target_param.data * (1.0 - tau) + param.data * tau)
             
-    def lr_decay(self, total_steps):
-        lr_a_now = self.lr * (1 - total_steps / self.max_train_steps)
-        lr_c_now = self.lr * (1 - total_steps / self.max_train_steps)
-        for opt in self.optimizer_actor.param_groups:
-            opt['lr'] = lr_a_now
-        for opt in self.optimizer_critic1.param_groups:
-            opt['lr'] = lr_c_now
-        for opt in self.optimizer_critic2.param_groups:
-            opt['lr'] = lr_c_now
