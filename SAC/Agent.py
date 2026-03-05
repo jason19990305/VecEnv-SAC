@@ -140,7 +140,7 @@ class Agent():
         entropy_list = []
         evaluate_count = 0
         
-         # Reset Vector Env
+        # Reset Vector Env
         s , infos = self.venv.reset()                        
 
         # Training Loop
@@ -162,8 +162,7 @@ class Agent():
                     self.total_steps += 1
                     evaluate_count += 1
                 
-                s = s_
-            
+                s = s_           
             
             
             # Evaluate
